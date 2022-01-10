@@ -1,10 +1,11 @@
-const { chunk } = require("lodash");
-const { DynamoDB } = require("aws-sdk");
+const { DynamoDB, config } = require("aws-sdk");
+config.update({ region: "us-east-1" });
 
 const dynamoDb = new DynamoDB.DocumentClient();
 
 const TABLE = {
-  MAIN: "servicename-main"
+  MAIN: "thurman-main",
+  INFO: "thurman-info",
 };
 
 /**
@@ -19,15 +20,16 @@ const TABLE = {
 const getDbItem = async (
   key,
   tableName = TABLE.MAIN,
-  transformItem = item => item
+  keyName = "id",
+  transformItem = (item) => item
 ) => {
   return dynamoDb
     .get({
       TableName: tableName,
-      Key: { id: key }
+      Key: { [keyName]: key },
     })
     .promise()
-    .then(item => {
+    .then((item) => {
       if (item.Item) {
         return transformItem(item.Item);
       }
@@ -48,7 +50,7 @@ const saveDbItem = (item, tableName = TABLE.MAIN) => {
   return dynamoDb
     .put({
       TableName: tableName,
-      Item: item
+      Item: item,
     })
     .promise();
 };
@@ -65,26 +67,51 @@ const saveDbItem = (item, tableName = TABLE.MAIN) => {
 const updateDbItem = (key, item, tableName = TABLE.MAIN) => {
   // properly just trying to show off here, so unecessary
   const UpdateExpression = `set ${Object.keys(item)
-    .map(k => `${k} = :${k.toLowerCase()}`)
+    .map((k) => `#${k.toLowerCase()} = :${k.toLowerCase()}`)
     .join(", ")}`;
-  const ExpressionAttributeValues = Object.entries(item).reduce(
+  const ExpressionAttributeNames = Object.entries(item).reduce(
     (cumulativeObject, currProperty) => {
       return {
         ...cumulativeObject,
-        [`:${currProperty[0].toLowerCase()}`]: currProperty[1]
+        [`#${currProperty[0].toLowerCase()}`]: currProperty[0],
       };
     },
     {}
   );
+  const ExpressionAttributeValues = Object.entries(item).reduce(
+    (cumulativeObject, currProperty) => {
+      return {
+        ...cumulativeObject,
+        [`:${currProperty[0].toLowerCase()}`]: currProperty[1],
+      };
+    },
+    {}
+  );
+
+  console.log({
+    TableName: tableName,
+    Key: { id: key },
+    UpdateExpression,
+    ExpressionAttributeNames,
+    ExpressionAttributeValues,
+  });
 
   return dynamoDb
     .update({
       TableName: tableName,
       Key: { id: key },
       UpdateExpression,
-      ExpressionAttributeValues
+      ExpressionAttributeNames,
+      ExpressionAttributeValues,
     })
     .promise();
+};
+
+const chunk = (arr, chunkSize = 1, cache = []) => {
+  const tmp = [...arr];
+  if (chunkSize <= 0) return cache;
+  while (tmp.length) cache.push(tmp.splice(0, chunkSize));
+  return cache;
 };
 
 /**
@@ -96,25 +123,63 @@ const updateDbItem = (key, item, tableName = TABLE.MAIN) => {
  * @returns {Promise<void[]>}
  */
 const saveMultipleItems = (itemsRaw, tableName = TABLE.MAIN) => {
-  const items = itemsRaw.map(item => {
+  const items = itemsRaw.map((item) => {
     return {
       Put: {
         TableName: tableName,
-        Item: item
-      }
+        Item: item,
+      },
     };
   });
 
   return Promise.all(
-    chunk(items, 25).map(chunk => {
+    chunk(items, 25).map((chunk) => {
       return dynamoDb
         .transactWrite({
-          TransactItems: chunk
+          TransactItems: chunk,
         })
         .promise();
     })
   );
 };
+
+const scanTable = (tableName = TABLE.MAIN) => {
+  return new Promise((resolve, reject) => {
+    const items = [];
+
+    const get = (key) => {
+      const params = {
+        TableName: tableName,
+      };
+
+      if (key) {
+        params.ExclusiveStartKey = key;
+      }
+
+      dynamoDb
+        .scan(params)
+        .promise()
+        .then((data) => {
+          items.push(...data.Items);
+          process.stdout.clearLine();
+          process.stdout.cursorTo(0);
+          process.stdout.write(`Total records currently: ${items.length}`);
+
+          if (data.LastEvaluatedKey && data.LastEvaluatedKey !== key) {
+            get(data.LastEvaluatedKey);
+          } else {
+            resolve(items);
+            console.log("");
+          }
+        })
+        .catch((e) => reject(e));
+    };
+
+    get();
+  });
+};
+
+module.exports = { scanTable };
 
 module.exports = {
   dynamoDb,
@@ -122,5 +187,7 @@ module.exports = {
   getDbItem,
   saveDbItem,
   updateDbItem,
-  saveMultipleItems
+  saveMultipleItems,
+  scanTable,
+  chunk,
 };

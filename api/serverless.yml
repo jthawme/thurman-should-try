@@ -1,0 +1,96 @@
+service: thurman # make sure to update this
+
+useDotenv: true
+
+provider:
+  name: aws
+  runtime: nodejs12.x
+  stage: dev
+  region: us-east-1
+  environment:
+    SERVICE_NAME: ${self:service}
+    DYNAMODB_TABLE: ${self:service}-main
+    DYNAMODB_INFO_TABLE: ${self:service}-info
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+      Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.DYNAMODB_TABLE}"
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+      Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.DYNAMODB_INFO_TABLE}"
+
+functions:
+  # Get methods
+  ping:
+    events:
+      - http:
+          method: get
+          path: ping
+          cors: true
+    handler: index.ping
+  random:
+    events:
+      - http:
+          method: get
+          path: random
+          cors: true
+    handler: index.random
+
+  # post:
+  #   events:
+  #     - http:
+  #         method: post
+  #         path: post
+  #         cors: true
+  #   handler: api/index.post
+
+  scheduledEvents:
+    events:
+      - schedule: rate(5 days)
+    handler: index.tweet
+
+resources:
+  Resources:
+    MainTable:
+      Type: "AWS::DynamoDB::Table"
+      DeletionPolicy: Retain
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}
+        BillingMode: PAY_PER_REQUEST
+    InfoTable:
+      Type: "AWS::DynamoDB::Table"
+      DeletionPolicy: Retain
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: key
+            AttributeType: S
+        KeySchema:
+          - AttributeName: key
+            KeyType: HASH
+        TableName: ${self:provider.environment.DYNAMODB_INFO_TABLE}
+        BillingMode: PAY_PER_REQUEST
+
+plugins:
+  - serverless-offline
+  - serverless-dotenv-plugin
+
+package:
+  excludeDevDependencies: false
