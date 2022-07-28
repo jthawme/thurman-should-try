@@ -1,4 +1,4 @@
-const Twitter = require("twitter");
+const Twitter = require("twitter-lite");
 
 const getClient = () => {
   return new Twitter({
@@ -9,10 +9,19 @@ const getClient = () => {
   });
 };
 
+const getTweet = (id) => {
+  const client = getClient();
+
+  return client.get(`statuses/show`, {
+    id: id.toString(),
+    tweet_mode: "extended",
+  });
+};
+
 const postTweet = (txt) => {
   const client = getClient();
 
   return client.post("statuses/update", { status: txt });
 };
 
-module.exports = { postTweet };
+module.exports = { getTweet, postTweet };

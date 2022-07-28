@@ -47,6 +47,13 @@ functions:
           path: random
           cors: true
     handler: index.random
+  lookup:
+    events:
+      - http:
+          method: get
+          path: lookup
+          cors: true
+    handler: index.lookupTweet
 
   # post:
   #   events:

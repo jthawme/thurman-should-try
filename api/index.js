@@ -1,6 +1,6 @@
 const { Types } = require("./common/constants");
 const { updateDbItem } = require("./common/db");
-const { postTweet } = require("./common/twitter");
+const { postTweet, getTweet } = require("./common/twitter");
 const {
   infoValue,
   getRandomIdea,
@@ -39,7 +39,7 @@ const tweet = wrap(async () => {
 
   await updateDbItem(id, {
     ...idea,
-    tweet: body.id,
+    tweet: body.id_str,
   });
   await removeId(id);
 
@@ -48,8 +48,24 @@ const tweet = wrap(async () => {
   };
 });
 
+const lookupTweet = wrap(async () => {
+  try {
+    const tweet = await getTweet(1480522137731764234);
+
+    return {
+      statusCode: 200,
+      body: tweet,
+    };
+  } catch (e) {
+    console.error(e);
+
+    throw e;
+  }
+});
+
 module.exports = {
   ping,
   random,
   tweet,
+  lookupTweet,
 };
